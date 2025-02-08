@@ -1,17 +1,13 @@
 table.unpack = table.unpack or unpack -- 5.1 compatibility
 local Path = require('plenary.path')
 local telescope = require('telescope.builtin')
-local M = {}
 
---[[ function returning a random alphanumeric string of length k --]]
--- https://stackoverflow.com/questions/72523578/is-there-a-way-to-generate-an-alphanumeric-string-in-lua
 local random_string = function (k)
   math.randomseed(os.time())
   local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   local n = string.len(alphabet)
   local pw = {}
-  for i = 1, k
-  do
+  for i = 1, k do
     pw[i] = string.byte(alphabet, math.random(n))
   end
   return string.char(table.unpack(pw, 1, k))
@@ -40,58 +36,52 @@ local create_buffer_with_name_and_content = function (path, content, override)
   return buf
 end
 
+local create_post_or_draft = function (title, folder, date_and_time)
+  if title == "" then return end
+  local title_slug = title:lower():gsub(" ", "-"):gsub("[^%w-]", "")
+  local filename = string.format("%s.md", title_slug)
+  local time = os.date("%H:%M:%S %z")
+  local date = os.date("%Y-%m-%d")
+  if date_and_time then
+    filename = string.format("%s-%s.md", date, title_slug)
+  end
+  local path = vim.fn.expand(vim.uv.cwd() .. "/" .. folder .. "/" .. filename)
+  local content = {
+    "---",
+    "layout: post",
+    string.format("title: '%s'", title),
+    "categories: ",
+    "tags: ",
+    "---",
+  }
+  if date_and_time then
+    local date_front_matter = string.format("date: %sT%s", date, time)
+    table.insert(content, 3, date_front_matter)
+  end
+  create_buffer_with_name_and_content(path, content)
+end
+
+local M = {}
+
 M.setup = function ()
   -- pass
 end
 
 M.create_post = function ()
-  -- Get title from user
   local title = vim.fn.input("Title: ")
-  if title == "" then return end
-  -- Format date and filename
-  local date = os.date("%Y-%m-%d")
-  local time = os.date("%H:%M:%S %z")
-  local filename = string.format("%s-%s.md",
-    date,
-    title:lower():gsub(" ", "-"):gsub("[^%w-]", ""))
-  local path = vim.fn.expand(vim.uv.cwd() .. "/_posts/" .. filename)
-  local content = {
-    "---",
-    "layout: post",
-    string.format("title: '%s'", title),
-    string.format("date: %s %s", date, time),
-    "categories: ",
-    "tags: ",
-    "---",
-  }
-  create_buffer_with_name_and_content(path, content)
+  create_post_or_draft(title, "_posts", true)
 end
 
 M.create_draft = function ()
-  -- Get title from user
   local title = vim.fn.input("Title: ")
-  if title == "" then return end
-  local filename = string.format("%s.md", title:lower():gsub(" ", "-"):gsub("[^%w-]", ""))
-  local path = vim.fn.expand(vim.uv.cwd() .. "/_drafts/" .. filename)
-  local content = {
-    "---",
-    "layout: post",
-    string.format("title: '%s'", title),
-    "categories: ",
-    "tags: ",
-    "---",
-  }
-  create_buffer_with_name_and_content(path, content)
+  create_post_or_draft(title, "_drafts", false)
 end
 
 M.create_note = function()
   local date = os.date("%Y-%m-%d")
   local time = os.date("%H:%M:%S")
   local slug = random_string(5)
-  local filename = string.format("%s-%s.md",
-    date,
-    slug
-  )
+  local filename = string.format("%s-%s.md", date, slug)
   local path = vim.fn.expand(vim.uv.cwd() .. "/_notes/" .. filename)
   local content = {"---", string.format("date: %sT%s", date, time), "---"}
   create_buffer_with_name_and_content(path, content)
@@ -100,7 +90,6 @@ end
 M.promote_draft = function()
   local drafts_dir = Path:new(vim.uv.cwd(), '_drafts')
   local posts_dir = Path:new(vim.uv.cwd(), '_posts')
-  -- Use Telescope to pick a draft
   telescope.find_files({
     prompt_title = "Select Draft to Promote",
     cwd = tostring(drafts_dir),
@@ -108,22 +97,16 @@ M.promote_draft = function()
       map('i', '<CR>', function(prompt_bufnr)
         local selection = require('telescope.actions.state').get_selected_entry()
         require('telescope.actions').close(prompt_bufnr)
-        -- Get the current date
         local date_prefix = os.date('%Y-%m-%d')
         local draft_path = Path:new(drafts_dir .. "/" .. selection.value)
         local new_filename = date_prefix .. '-' .. selection.value
         local new_path = Path:new(posts_dir, new_filename)
-        -- Read the draft content
         local content = draft_path:read()
-        -- Add date to YAML front matter
         content = content:gsub('date:.-\n', '')
         local date_line = 'date: ' .. os.date('%Y-%m-%d %H:%M:%S') .. ' +0000\n'
         content = content:gsub('^(%-%-%-\n)', '%1' .. date_line)
-        -- Write to the new post file
         new_path:write(content, 'w')
-        -- Open the new post file in a buffer
         vim.cmd('edit ' .. new_path.filename)
-        -- Delete the original draft
         draft_path:rm()
         print('Draft promoted to post: ' .. new_path.filename)
       end)
@@ -131,5 +114,6 @@ M.promote_draft = function()
     end,
   })
 end
+
 return M
 
