@@ -6,7 +6,7 @@ This is a work in progress.
 
 ## Installation
 
-lazy.nvim
+### lazy.nvim
 
 ```lua
 return {
