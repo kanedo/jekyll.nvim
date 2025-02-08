@@ -18,7 +18,7 @@ local random_string = function (k)
 end
 
 local create_buffer_with_name_and_content = function (path, content, override)
-  override = override or false 
+  override = override or false
   local buf = nil
   if not override and vim.fn.filereadable(path) == 1 then
     vim.cmd.edit(path)
@@ -132,3 +132,4 @@ M.promote_draft = function()
   })
 end
 return M
+
