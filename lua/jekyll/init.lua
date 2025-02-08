@@ -3,6 +3,8 @@ local Path = require('plenary.path')
 local telescope = require('telescope.builtin')
 
 local random_string = function (k)
+  --[[ function returning a random alphanumeric string of length k --]]
+  -- https://stackoverflow.com/questions/72523578/is-there-a-way-to-generate-an-alphanumeric-string-in-lua
   math.randomseed(os.time())
   local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
   local n = string.len(alphabet)
