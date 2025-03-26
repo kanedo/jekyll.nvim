@@ -23,6 +23,8 @@ local random_string = function(k)
   return string.char(table.unpack(pw, 1, k))
 end
 
+local modeline = { '', '<!-- vim: set ft=liquid -->' }
+
 ---Main point of entry into creating documents that Jekyll understands
 ---@param path string
 ---@param content string[]
@@ -37,12 +39,13 @@ local create_buffer_with_name_and_content = function(path, content)
   else
     buf = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_buf_set_name(buf, path)
-    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = buf })
+    vim.api.nvim_set_option_value('filetype', 'liquid', { buf = buf })
     vim.schedule(function()
       vim.api.nvim_set_option_value('modifiable', true, { buf = buf })
       vim.api.nvim_set_current_buf(buf)
       vim.api.nvim_buf_set_lines(buf, 0, -1, true, content)
-      local last_line = vim.api.nvim_buf_line_count(buf)
+      vim.api.nvim_buf_set_lines(buf, -1, -1, true, modeline)
+      local last_line = vim.api.nvim_buf_line_count(buf) - #modeline
       vim.api.nvim_win_set_cursor(0, { last_line, 0 })
     end)
   end
@@ -186,35 +189,57 @@ local is_jekyll_window = function()
   return gem_match
 end
 
----Autocommands for making/deleting user_commands on DirChanged event
+---Determines if the current buffer is on the cdpath of a jekyll window
+local is_jekyll_buffer = function()
+  return is_jekyll_window() and vim.fn.findfile(vim.fn.expand('%'), vim.o.cdpath)
+end
+
 ---@param opts JekyllNvimOptions
 ---@return integer? augroup id number
 local setup_autocmds = function(opts)
-  local augroup_exists = function()
-    local _augroup_exists, _ = pcall(function()
-      vim.api.nvim_create_augroup(opts.augroup_name, { clear = false })
-    end)
-    return _augroup_exists
+  ---Create augroup, or retrieve existing one
+  local augroup = vim.api.nvim_create_augroup(opts.augroup_name, { clear = false })
+
+  ---Autocommand for making/deleting user_commands on DirChanged event
+  ---@param _opts JekyllNvimOptions
+  local autocmd_create_del_user_commands = function(_opts)
+    vim.api.nvim_create_autocmd('DirChanged', {
+      desc = 'Decide whether cwd needs Jekyll user_commands',
+      group = _opts.augroup_name,
+      callback = function(_)
+        if is_jekyll_window() then
+          create_user_commands()
+        else
+          del_user_commands()
+        end
+      end,
+    })
   end
-  if not augroup_exists() then
-    vim.api.nvim_create_augroup(opts.augroup_name, {})
+
+  ---Autocommand for explicitly using the `liquid` filetype so as to get the benefits of snippets, etc...
+  ---@param _opts JekyllNvimOptions
+  local autocmd_markup_files_use_liquid_ft = function(_opts)
+    vim.api.nvim_create_autocmd('BufEnter', {
+      desc = 'Change filetype of html/markdown to liquid',
+      group = _opts.augroup_name,
+      callback = function(_)
+        if is_jekyll_buffer() then
+          if vim.bo.filetype == 'markdown' or vim.bo.filetype == 'html' then
+            vim.bo.filetype = 'liquid'
+          end
+        end
+      end,
+    })
   end
-  vim.api.nvim_create_autocmd('DirChanged', {
-    desc = 'Decide whether cwd needs Jekyll user_commands',
-    group = opts.augroup_name,
-    callback = function(_)
-      if is_jekyll_window() then
-        create_user_commands()
-      else
-        del_user_commands()
-      end
-    end,
-  })
-  return vim.api.nvim_create_augroup(opts.augroup_name, { clear = false })
+
+  autocmd_create_del_user_commands(opts)
+  autocmd_markup_files_use_liquid_ft(opts)
+  return augroup
 end
 
 ---@param opts? JekyllNvimOptions
 M.setup = function(opts)
+  ---@type JekyllNvimOptions
   local merged_options = vim.tbl_extend('force', M.opts, opts or {})
   if is_jekyll_window() then
     create_user_commands()
